@@ -1,7 +1,9 @@
+This script contains comprehensive code for loading, summarizing, analyzing, and visualizing the dataset.
+
 # Load SparkR package
 library(SparkR) 
 
-# Load file into dataframe
+# Load file into data frame
 df <- read.df("/FileStore/AustraliaWeatherData.csv", source = "csv", header="true", inferSchema = "true") 
 head(df) 
 
@@ -9,8 +11,7 @@ head(df)
 %fs cp "/FileStore/tables/AustraliaWeatherData.csv" 
 "/users/ryuson/AustraliaWeatherData.csv" 
 
-##########
-# Create Hive Table
+########## Create Hive Table
 # Set language to SQL
 %sql 
 DROP TABLE IF EXISTS weather_full; 
@@ -31,12 +32,11 @@ RainToday STRING, RainTomorrow STRING)
 USING CSV 
 LOCATION '/users/ryuson/AustraliaWeatherData.csv'; 
 
-##########
-# Enable dynamic partitioning
+########## Enable dynamic partitioning
 %sql 
-set hive.exec.dynamic.partition =  TRUE; 
-set hive.exec.dynamic.partition.mode = nonstrict; 
-set hive.exec.max.dynamic.partitions = 1500; 
+SET hive.exec.dynamic.partition =  TRUE; 
+SET hive.exec.dynamic.partition.mode = nonstrict; 
+SET hive.exec.max.dynamic.partitions = 1500; 
 
 # Create Year partitioned table
 %sql
@@ -60,7 +60,7 @@ FIELDS TERMINATED BY ','
 LINES TERMINATED BY '\n' 
 STORED AS TEXTFILE;
 
-# Load data into partitioned table
+# Load data into the partitioned table
 # Use year() function to derive the year from the date column and partition the data by the derived column
 %sql 
 INSERT OVERWRITE TABLE year_part 
@@ -68,16 +68,89 @@ PARTITION (`Year`)
 SELECT *, 
 Year(`Date`) AS `Year` FROM weather_full; 
 
-##########
-# Data Summarization
-
+########## Data Summarization with HiveQL
+## Set cell language to SQL, given that the notebook's default language is R
 %sql 
----How many instances do we have each year 
-select `Year`, count (*) as Total_Instances 
-from year_part 
-group by `Year` 
-order by `Year`; 
 
+--- How many instances do we have in each year? 
+USE ryuson;
+SELECT `Year`, count (*) as Total_Instances 
+FROM year_part 
+GROUP BY `Year` 
+ORDER BY `Year`; 
 
+-- How many months of data are available each year? 
+SELECT year, month(Date) as month 
+FROM year_part 
+GROUP BY year, month 
+ORDER BY year, month; 
 
+-- Which areas of Australia experience the most precipitation?
+SELECT Location, round(avg(Rainfall),2) AS Avg_Rainfall_cm 
+FROM weather_full 
+GROUP BY Location 
+ORDER BY avg(Rainfall) DESC 
+LIMIT 10; 
 
+-- What are the locations with the top 10 highest rainfall? Which years had the highest rainfall for these locations?
+SELECT location, year, max(Rainfall) as max_rainfall 
+FROM year_part 
+GROUP BY location, year 
+ORDER BY max_rainfall desc 
+LIMIT 10; 
+
+--- What do monthly rain patterns look like in the location with the highest rainfall? 
+SELECT location, CAST(year(date) AS INT) || '-' || CAST(month(date) AS INT) AS YearMonth, round(avg(Rainfall),2) AS Avg_Rainfall_cm 
+FROM weather_full 
+Where location = "Cairns" 
+GROUP BY month(date), year(date), location 
+ORDER BY CAST(Year(date) AS INT), CAST(Month(date) AS INT) ASC;
+
+--- Look at instances in 2011 where rainfall was higher than average to identify any outliers.
+SELECT * 
+FROM year_part 
+WHERE Location = "Cairns" 
+AND `Year` = 2011 
+AND month(`Date`) = 2 
+AND Rainfall > 35.69; 
+
+--- Which areas have experienced the highest temperatures? 
+SELECT Location, max(MaxTemp) AS MaxTemp 
+FROM weather_full 
+GROUP BY Location 
+ORDER BY MaxTemp desc 
+LIMIT 10; 
+
+-- How have general weather patterns changed over time? 
+-- Compare average numeric weather features. 
+SELECT year, 
+round(avg(MinTemp), 2) AS AvgMinTemp, 
+round(avg(MaxTemp), 2) AS AvgMaxTemp,  
+round(avg(Sunshine), 2) AS AvgEvaporation, 
+round(avg(Sunshine), 2) AS AvgSunshine, 
+round(avg(Rainfall), 2) AS AvgRainfall 
+FROM year_part 
+WHERE year != "2007" AND year != "2017" 
+GROUP BY year 
+ORDER BY year; 
+
+– How are general/static weather characteristics (rain, evaportation, and sunshine) correlated?
+SELECT corr(Sunshine, Evaporation) AS sun_evap,
+corr(Sunshine, Rainfall) AS sun_rain, 
+corr(Rainfall, Evaporation) AS rain_evap 
+FROM year_part; 
+
+-- Have daily/dynamic weather characteristics become more variable over time? 
+-- Compare changes in morning/afternoon weather measurements by year. 
+SELET year,
+round(avg(WindSpeed9am), 2) AS AvgWindSpeed9am, round(avg(WindSpeed3pm), 2) AS AvgWindSpeed3pm,  
+round(avg(Humidity9am), 2) AS AvgHumidity9am, round(avg(Humidity3pm), 2) AS AvgHumidity3pm,  
+round(avg(Pressure9am), 2) AS AvgPressure9am, round(avg(Pressure3pm), 2) AS AvgPressure3pm, 
+round(avg(Cloud9am), 2) AS AvgCloud9am, round(avg(Cloud3pm), 2) AS AvgCloud3pm, 
+round(avg(Temp9am), 2) AS AvgTemp9am, round(avg(Temp3pm), 2) AS AvgTemp3pm 
+FROM year_part 
+WHERE year != "2007" AND year != "2017" 
+GROUP BY year 
+ORDER BY year; 
+
+#Data Analysis and Model Performance
