@@ -1,0 +1,83 @@
+# Load SparkR package
+library(SparkR) 
+
+# Load file into dataframe
+df <- read.df("/FileStore/AustraliaWeatherData.csv", source = "csv", header="true", inferSchema = "true") 
+head(df) 
+
+# Copy file to personal database to prevent loss of data file when loaded into Hive table
+%fs cp "/FileStore/tables/AustraliaWeatherData.csv" 
+"/users/ryuson/AustraliaWeatherData.csv" 
+
+##########
+# Create Hive Table
+# Set language to SQL
+%sql 
+DROP TABLE IF EXISTS weather_full; 
+
+CREATE TABLE weather_full (
+`Date` DATE, Location STRING, 
+MinTemp DOUBLE, MaxTemp DOUBLE, 
+Rainfall DOUBLE, Evaporation DOUBLE, Sunshine DOUBLE, 
+WindGustDir STRING, WindGustSpeed DOUBLE, 
+WindDir9am STRING, WindDir3pm STRING, 
+WindSpeed9am DOUBLE, WindSpeed3pm DOUBLE,
+Humidity9am DOUBLE, Humidity3pm DOUBLE, 
+Pressure9am DOUBLE, Pressure3pm DOUBLE, 
+Cloud9am DOUBLE, Cloud3pm DOUBLE, 
+Temp9am DOUBLE, Temp3pm DOUBLE, 
+RainToday STRING, RainTomorrow STRING) 
+
+USING CSV 
+LOCATION '/users/ryuson/AustraliaWeatherData.csv'; 
+
+##########
+# Enable dynamic partitioning
+%sql 
+set hive.exec.dynamic.partition =  TRUE; 
+set hive.exec.dynamic.partition.mode = nonstrict; 
+set hive.exec.max.dynamic.partitions = 1500; 
+
+# Create Year partitioned table
+%sql
+CREATE TABLE IF NOT  EXISTS year_part (
+Location STRING, 
+MinTemp DOUBLE, MaxTemp DOUBLE, 
+Rainfall DOUBLE, Evaporation DOUBLE, Sunshine DOUBLE, 
+WindGustDir STRING, WindGustSpeed DOUBLE,
+WindDir9am STRING, WindDir3pm STRING, 
+WindSpeed9am DOUBLE, WindSpeed3pm DOUBLE,
+Humidity9am DOUBLE, Humidity3pm DOUBLE, 
+Pressure9am DOUBLE, Pressure3pm DOUBLE,
+Cloud9am DOUBLE, Cloud3pm DOUBLE, 
+Temp9am DOUBLE, Temp3pm DOUBLE, 
+RainToday STRING, RainTomorrow STRING, 
+`Date` DATE, `Year` INT) 
+
+PARTITIONED BY (year_part INT) 
+ROW FORMAT DELIMITED 
+FIELDS TERMINATED BY ',' 
+LINES TERMINATED BY '\n' 
+STORED AS TEXTFILE;
+
+# Load data into partitioned table
+# Use year() function to derive the year from the date column and partition the data by the derived column
+%sql 
+INSERT OVERWRITE TABLE year_part 
+PARTITION (`Year`) 
+SELECT *, 
+Year(`Date`) AS `Year` FROM weather_full; 
+
+##########
+# Data Summarization
+
+%sql 
+---How many instances do we have each year 
+select `Year`, count (*) as Total_Instances 
+from year_part 
+group by `Year` 
+order by `Year`; 
+
+
+
+
