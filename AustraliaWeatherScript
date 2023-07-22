@@ -68,8 +68,8 @@ PARTITION (`Year`)
 SELECT *, 
 Year(`Date`) AS `Year` FROM weather_full; 
 
-########## Data Summarization with HiveQL
-## Set cell language to SQL, given that the notebook's default language is R
+########## Data Summarization with HiveQL ##########
+## NOTE: Set cell language to SQL, given that the notebook's default language is R
 %sql 
 
 --- How many instances do we have in each year? 
@@ -134,7 +134,7 @@ WHERE year != "2007" AND year != "2017"
 GROUP BY year 
 ORDER BY year; 
 
-– How are general/static weather characteristics (rain, evaportation, and sunshine) correlated?
+– How are general/static weather characteristics (rain, evaporation, and sunshine) correlated?
 SELECT corr(Sunshine, Evaporation) AS sun_evap,
 corr(Sunshine, Rainfall) AS sun_rain, 
 corr(Rainfall, Evaporation) AS rain_evap 
@@ -142,7 +142,7 @@ FROM year_part;
 
 -- Have daily/dynamic weather characteristics become more variable over time? 
 -- Compare changes in morning/afternoon weather measurements by year. 
-SELET year,
+SELECT year,
 round(avg(WindSpeed9am), 2) AS AvgWindSpeed9am, round(avg(WindSpeed3pm), 2) AS AvgWindSpeed3pm,  
 round(avg(Humidity9am), 2) AS AvgHumidity9am, round(avg(Humidity3pm), 2) AS AvgHumidity3pm,  
 round(avg(Pressure9am), 2) AS AvgPressure9am, round(avg(Pressure3pm), 2) AS AvgPressure3pm, 
@@ -153,4 +153,55 @@ WHERE year != "2007" AND year != "2017"
 GROUP BY year 
 ORDER BY year; 
 
-#Data Analysis and Model Performance
+########## Data Analysis and Model Performance ##########
+# NOTE: The following code is written in R, in accordance with the notebook's default language
+# How accurately can we predict the high temperature of a day based on the temperatures recorded throughout the day? 
+# Regression (MSE/RMSE)
+
+df2<-dropna(df)
+
+#Split data into training/testing
+df_list <- randomSplit(df2, c(7,3), 2) 
+training<-df_list[[1]]
+testing<-df_list[[2]]
+
+#Create general linear model
+#Predict MaxTemp using 9AM and 3PM temperatures
+temp_model <- spark.glm(training,                                   
+                        MaxTemp ~ Temp9am + Temp3pm,                                      
+                        family = "gaussian") 
+ 
+Output_temp <- predict(temp_model, testing)
+Output <- select(Output_temp, Output_temp$MaxTemp, Output_temp$Temp9am, Output_temp$Temp3pm, Output_temp$prediction)
+
+#Show output
+showDF(Output,10) 
+ 
+#MSE
+showDF(select(Output_temp, avg((Output_temp$MaxTemp-Output_temp$prediction)^2)))
+ 
+ 
+#RMSE (1.087)
+showDF(select(Output_temp, 
+           sqrt(avg((Output_temp$MaxTemp-Output_temp$prediction)^2))))
+ 
+#MAPE (3.26%)
+showDF(select(Output_temp, 
+    avg(abs(Output_temp$MaxTemp-  
+            Output_temp$prediction)/abs(Output_temp$MaxTemp)))) 
+
+
+# Visualize Actual vs. Predicted Max Temperatures
+library(ggplot2)
+
+# Convert to R data frame to utilize for scatterplot
+rfr_df <- collect(Output_temp)
+
+qplot(rfr_df$MaxTemp, rfr_df$prediction, xlab='Actual High Temp', ylab='Predicted HighTemp', 
+main='Actual vs Predicted High Temperature')
+
+
+
+
+
+
