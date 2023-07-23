@@ -155,6 +155,7 @@ ORDER BY year;
 
 ########## Data Analysis and Model Performance ##########
 # NOTE: The following code is written in R, in accordance with the notebook's default language
+
 # How accurately can we predict the high temperature of a day based on the temperatures recorded throughout the day? 
 # Regression (MSE/RMSE)
 
@@ -200,7 +201,154 @@ rfr_df <- collect(Output_temp)
 qplot(rfr_df$MaxTemp, rfr_df$prediction, xlab='Actual High Temp', ylab='Predicted HighTemp', 
 main='Actual vs Predicted High Temperature')
 
+########## Classification - Logistic Regression
+# Which features predict raintomrrow with the highest accuracy?
+# Split training/testing sets
+df_list <- randomSplit(df, c(7,3), 2) 
+training_df <- df_list[[1]]
+testing_df <- df_list[[2]]
+ 
+model_log <- spark.logit(training_df, 
+                RainTomorrow ~ . - Date, 
+                regParam = 0.2, #regularization parameter (>=0)
+                elasticNetParam=0, #regularization function
+                family = "auto", 
+                thresholds = 0.5, 
+                handleInvalid = "skip")\
+summary(model_log)
 
+# Apply to test set
+OutputRain <- predict(model_log, testing_df)
+showDF(OutputRain) #show output
+ 
+Correct <- nrow(where(OutputRain, OutputRain$RainTomorrow == OutputRain$prediction)) 
+Total <- nrow(OutputRain)
+
+#Performance metrics
+# Accuracy
+Accuracy <- Correct/Total 
+ 
+# Precision 
+TP <- nrow(where(OutputRain, OutputRain$RainTomorrow == 'Yes' & OutputRain$prediction == 'Yes')) #TP = predicted yes when the it was actually yes
+FP <- nrow(where(OutputRain, OutputRain$RainTomorrow == 'No' & OutputRain$prediction == 'Yes')) #FP = predicted yes when it was actually no
+Precision = TP/(TP+FP) 
+ 
+# Recall 
+FN <- nrow(where(OutputRain, OutputRain$RainTomorrow == 'Yes' & OutputRain$prediction == 'No')) #FN = predicted no when it was actually yes
+Recall = TP/(TP+FN)
+ 
+# Specificity
+TN <- nrow(where(OutputRain, OutputRain$RainTomorrow == 'No' & OutputRain$prediction == 'No')) #TN = predicted no when it was no 
+specificity = TN/(TN+FP)
+ 
+# Negative predictive value
+NPV = TN/(TN+FN)
+
+# Print metrics
+cat("Accuracy: ",Accuracy, "\n")
+cat("Precision: ",Precision, "\n")
+cat("Recall: ",Recall, "\n")
+cat("Specificity: ",specificity, "\n")
+cat("Negative Predictive Value: ",NPV, "\n")
+
+########## Logistic ROC Curve
+library(pROC) 
+
+# Convert to R data frame
+OutputRain_r=collect(OutputRain) 
+str(OutputRain_r)
+
+# Create new column
+OutputRain_r$predPosProb=0 
+for(i in 1:nrow(OutputRain_r)){
+   OutputRain_r$predPosProb[i]=OutputRain_r$probability[[i]][["values"]][[2]]
+}
+
+# Actual label and predicted prob
+auc(OutputRain_r$RainTomorrow, OutputRain_r$predPosProb)
+rocobj <- plot.roc(OutputRain_r$RainTomorrow,OutputRain_r$predPosProb,main="ROC - Logistic Regression")
+
+# Display curve
+rocobj
+
+########## Classification - Clustering 
+# Which factors in Australian precipitation are most similar? 
+# For what reasons does it appear they are similar? 
+# Are there any factors that were initially expected to be similar but are not?
+
+df3<-dropna(df)
+df3$RainTomorrow <- ifelse(df3$RainTomorrow=="No",0,1)
+ 
+# k = 2
+model_km2 <- spark.kmeans(df3,~.-RainTomorrow,k=2,maxIter=20)
+output_km2 <- predict(model_km2,df3)
+Correct2 <- nrow(where(output_km2, output_km2$RainTomorrow==output_km2$prediction))
+Total2 <- nrow(output_km2)
+Accuracy2 = Correct2/Total2
+ 
+# k = 3
+model_km3 <- spark.kmeans(df3,~.-RainTomorrow,k=3,maxIter=20)
+output_km3 <- predict(model_km3,df3)
+Correct3 <- nrow(where(output_km3, output_km3$RainTomorrow==output_km3$prediction))
+Total3 <- nrow(output_km3)
+Accuracy3 = Correct3/Total3
+ 
+# k = 4
+model_km4 <- spark.kmeans(df3,~.-RainTomorrow,k=4,maxIter=20)
+output_km4 <- predict(model_km4,df3)
+Correct4 <- nrow(where(output_km4, output_km4$RainTomorrow==output_km4$prediction))
+Total4 <- nrow(output_km4)
+Accuracy4 = Correct4/Total4
+ 
+# k = 5
+model_km5 <- spark.kmeans(df3,~.-RainTomorrow,k=5,maxIter=20)
+output_km5 <- predict(model_km5,df3)
+Correct5 <- nrow(where(output_km5, output_km5$RainTomorrow==output_km5$prediction))
+Total5 <- nrow(output_km5)
+Accuracy5 = Correct5/Total5
+ 
+# k = 6
+model_km6 <- spark.kmeans(df3,~.-RainTomorrow,k=6,maxIter=20)
+output_km6 <- predict(model_km6,df3)
+Correct6 <- nrow(where(output_km6, output_km6$RainTomorrow==output_km6$prediction))
+Total6 <- nrow(output_km6)
+Accuracy6 = Correct6/Total6
+ 
+# k = 7
+model_km7 <- spark.kmeans(df3,~.-RainTomorrow,k=7,maxIter=20)
+output_km7 <- predict(model_km7,df3)
+Correct7 <- nrow(where(output_km7, output_km7$RainTomorrow==output_km7$prediction))
+Total7 <- nrow(output_km7)
+Accuracy7 = Correct7/Total7
+ 
+# k = 10
+model_km10 <- spark.kmeans(df3,~.-RainTomorrow,k=10,maxIter=20)
+output_km10 <- predict(model_km10,df3)
+Correct10 <- nrow(where(output_km10, output_km10$RainTomorrow==output_km10$prediction))
+Total10 <- nrow(output_km10)
+Accuracy10 = Correct10/Total10
+
+# Print accuracy of each cluster
+cat("Accuracy when k=2: ",Accuracy2, "\n")
+cat("Accuracy when k=3: ",Accuracy3, "\n")
+cat("Accuracy when k=4: ",Accuracy4, "\n")
+cat("Accuracy when k=5: ",Accuracy5, "\n")
+cat("Accuracy when k=6: ",Accuracy6, "\n")
+cat("Accuracy when k=7: ",Accuracy7, "\n")
+cat("Accuracy when k=10: ",Accuracy10)
+
+# Remove Date & Summarize
+model_km6 <- spark.kmeans(df3,~.-RainTomorrow-Date,k=6,maxIter=20)
+summary(model_km6)
+
+# Nrow in dataset; Nrow per cluster
+print(nrow(df3))
+print(nrow(where(output_km6,output_km6$prediction==0)))
+print(nrow(where(output_km6,output_km6$prediction==1)))
+print(nrow(where(output_km6,output_km6$prediction==2)))
+print(nrow(where(output_km6,output_km6$prediction==3)))
+print(nrow(where(output_km6,output_km6$prediction==4)))
+print(nrow(where(output_km6,output_km6$prediction==5)))
 
 
 
