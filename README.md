@@ -11,7 +11,7 @@ The primary objectives of this project are as follows:
 3. Classification Modeling: Utilizing the binary variables, "Rain Today" and "Rain Tomorrow," we will implement classification algorithms to predict future instances of rainfall.
 4. Model Evaluation: We will evaluate the performance of our regression and classification models to assess their accuracy and predictive power.
 
-## Dataset Description
+## Data Description
 Sourced from Kaggle, _AustraliaWeatherData.csv_ contains weather information for various locations in Australia, and consists of the following features:
 - **Date**: The date of the recorded weather data.
 - **Location**: The specific city or location in Australia.
